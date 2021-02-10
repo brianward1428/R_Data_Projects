@@ -2,7 +2,7 @@
 title: "Baseball Xcase"
 author: "Brian Ward"
 date: "11/12/2018"
-output: rmarkdown::github_document
+output: "rmarkdown::github_document"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
