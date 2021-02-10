@@ -1,0 +1,591 @@
+---
+title: "Tidyverse Intro"
+author: "Brian Ward"
+date: "11/27/2018"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+setwd('~/desktop/CS/md_projects')
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### What is tidyverse?
+Tidyverse is a collection of packages for R that are all designed to work together to help users stay organized and efficent throughout their data science projects. The core packages of Tidyverse consist of the following 8 packages:
+
+1. readr, for data import.
+2. tidyr, for data tidying.
+3. tibble, for tibbles, a modern re-imagining of data frames.
+4. dplyr, for data manipulation.
+5. stringr, for strings.
+6. ggplot2, for data visualisation.
+7. purrr, for functional programming.
+8. forcats, for factors.
+
+For this walk through I am going to focus i want to focus on the fundemental parts of a data project focusing on the following
+core packages:
+
+1. readr, for data import.
+2. tidyr, for data tidying.
+3. tibble, for tibbles, a modern re-imagining of data frames.
+4. dplyr, for data manipulation.
+5. stringr, for strings.
+
+
+I want to use the awesome cheatsheets provided on the R website, as a reference, that can be later followed along with.
+Here are the links, through Rstudio's site from which to download the cheatsheets:
+[For readr & tibble & tidyr cheatsheet][1]
+[For dplyr cheatsheet][2]
+[For stringr cheatsheet][3]
+
+I will address what I beleive to be the basic and most necessary parts of each of the cheatsheets along with a practice problem. I will refer to the cheatsheets by their sections seperated by a large title and a coloumn break in most cases. I am going to use a wine data set that I found on Kaggle.
+If you dont know about kaggle, you should, it is a great platform for anyone interested in data science. (you will have to make an account to download the file)  
+Here is the download link for the wine data-set:  
+[Wine Data-set][4]  
+
+First we load the tidyverse packages:
+```{r}
+library(tidyverse)
+setwd("~/Desktop/CS/md_projects")
+```
+### 1: Data Import with readr, tibble, and tidyr.
+
+###Page 1:
+* Read Tabular Data
+    + `read_csv()`
+    + `read_excel()` (via "readxl" package)
+* Data Types
+    + `col_types =`
+    + `col_double()`
+    + `col_integer()`
+    + `col_factor(levels, ordered = FALSE)`
+    + `parse_integer()`
+
+** Read Tabular Data **
+I am going to go out on a limb here and guess that the majority of any data that someone reading this tutorial will be reading in Tabular data and more specifically CSV's or Excel Files. For that reason I am only going to touch on these two examples.
+
+*note: Tabular data just means represented by a table [i.e. Rows and Columns], this could also be reffered to as rectangular data etc..*
+
+**what is a Delimeter?**
+A delimeter is simply a charachter that seperates different portions of text:   
+ex:   
+(dog,cat,mouse,goat) <- that is a list of 4 animals, but how does a computer know where to seperate each animal name? the comma, its pretty simple to us but it needs to be specified to the computer to understand how to read basic text files.   
+(dog cat mouse goat) <- Here the delimeter would simply be a "space" but that wouldnt work well if you had strings that had spaces in them right.    
+
+a CSV or "comma-seperated values" is the same thing as saying a comma delimited file:
+now lets look at some of the examples on the cheat sheet:
+
+note: you should see in each example the `write_file()` function that are quickly making the example files.     
+lets make the CSV file they suggest:
+
+```{r}
+write_file(x="a,b,c\n1,2,3\n4,5,NA", path = "file.csv")
+# okay now, lets read it back into our enviorment
+read_csv("file.csv")
+```
+
+okay great, thats simple enough right. okay now lets try with an excel documment. I am using a titanic excel sheet that I have but you can use whatever you want just make sure your in the right location. For excel documents we actually need to load another package called "readxl":
+
+
+```{r}
+
+library(readxl)
+read_excel("TitanicList.xlsx", sheet = 1)
+```
+this is pretty self explanatory, so i dont want to spend too much time on it. However the one important thing to recognise is the "sheet = " argument, as excel files often contain different sheets so you will probably use this many times.
+
+** Data Types **
+This is actually a part of data importation that I have recently realized to be much more important.
+**What is Parsing?**  
+in this context parsing is simply labeling each column with a certain datatype. This is something that readr will do autimatically (except for assigning strings to factors, which is something that BaseR will do).
+
+Lets actually make a new file.csv to practice with; giving each one a different type.
+```{r, collapse=TRUE}
+write_file(x="a,b,c,d\n1,T,3,dog\n4,FALSE,NA,cat\n6,F,5,mouse\n18,TRUE,3,moose", path = "file2.csv")
+read_csv("file2.csv")
+```
+Do you see how it will automatically read them in with certain types; under the **a** it says <int>, that is because readr guessed that it was an integer. And it also changed our "T" character into a TRUE, guessing that column C was of the type logical. This is pretty cool, as long as its right..  
+
+  Now lets try parsing manually using the `col_types = ` argument.
+```{r}
+x <- read_csv("file2.csv", col_types = cols(a = col_double(),b = col_logical(),c = col_integer(), d = col_factor(c("dog", "cat", "moose", "mouse"), ordered = FALSE)))
+# and now lets take a look:
+x
+```
+okay great, the one thing to note is that if you parse into a factor it will force you to specify the levels and whether or not they are ordered.
+
+**Parsing after reading the file**
+Unless you are working with files that you are farmiliar with it might be best to parse columns after loading the data. This way you can actually expore the data and see what your working with. for an examlpe lets change column a to an integer type instead of a double.
+```{r}
+x$a <- parse_integer(x$a)
+x
+```
+great, now you can see that the a is of the type integer.
+
+###Page 2:
+* Tibbles
+  + tibble()
+  + as_tibble()
+* Reshape Data
+  + gather()
+  + spread()
+* Handle Missing Values
+  + drop_na()
+  + fill()
+  + replace_na()
+* Expand Tables
+  + expand()
+* Split Cells
+  + seperate()
+  + unite()
+
+
+**Tibbles**
+A tibble is effectively the exact same thing as a dataframe with more enforcements.
+obviously you should see the further explination on the cheatsheet.
+
+Lets first make our own tibble:
+lets make the same table from file2.
+```{r}
+y <- tibble(a = c(1,4,6,18), b = c(T,FALSE,F,TRUE), c = c(3, NA, 5, 3), d = c("dog","cat","mouse","moose"))
+class(y)
+```
+again, its just a dataframe with more restrictions.
+
+Now lets say we want to convert a dataframe to a tibble:
+
+```{r}
+df <- data.frame(a = c(1,4,6,18), b = c(T,FALSE,F,TRUE), c = c(3, NA, 5, 3), d = c("dog","cat","mouse","moose"))
+class(df)
+```
+okay so theres a dataframe, now we simply use `as_tibble()` to convert it to a tibble.
+```{r}
+df <- as_tibble(df)
+class(df)
+```
+And now we see that it takes on three different classes.
+
+**Reshape Data**
+Both of the functions seen in this section are represented very clearly in the cheatsheet. They are also exactly opposite from one another. I would encourage you too look at the images shown to get an idea of what they do, then practice it with me.
+
+lets first create table4a
+```{r}
+table <- tibble(country = c("A","B","C"), "1999" = c("0.7K","37K","212K"), "2000" = c("2K","80K","213K"))
+table
+```
+Okay great, So now what if we instead wanted to have year be a variable or column. This is where the `gather()` function comes into play. lets give it a shot.
+
+`gather(data, key = "key", value = "value", ..., na.rm = FALSE,
+  convert = FALSE, factor_key = FALSE)`
+
+```{r}
+table <- gather(table, `1999`,`2000`, key = "year", value = "cases")
+table
+```
+And its that simple. now you can use the year as a factor that you could filter by.  
+
+okay now lets go ahead and try to do the exact opposite with the `spread()` function:
+`spread(data, key, value, fill = NA, convert = FALSE, drop = TRUE,
+  sep = NULL)`
+
+```{r}
+spread(table, year, cases)
+```
+Boom back to the original.
+
+**Handling Missing Values**
+First of all this is a sticky subject, knowing how to deal with missing values is a whole other deal, again, I am just showing you the tidyr tools.
+**Imputation**
+Imputation is the process of filling in missing data, and I feel it necessary to strike fear into doing anything with missing values without understanding the implications and what options you might have.
+Here is a great post about impuation:  
+[How to Handle Missing Data][5]
+
+Here we have three different options:
+1. removing any rows containing NA's
+2. Fill in NA's via the columns most recent non-NA value.
+3. Replace NA's by the column.
+
+lets first make the example tibble or dataframe.
+```{r}
+table <- tibble(x1= c("A","B","C", "D", "E"), x2 = c(1,NA,NA,3,NA))
+table
+```
+
+
+**1. removing any rows containing NA's**
+`drop_na(data, ...)`
+
+```{r}
+drop_na(table)
+```
+fairly straighforward. This is obviously an easy way to lose a lot of your data, so be careful.
+
+
+2. Fill in NA's via the columns most recent non-NA value.
+`fill(data, ..., .direction = c("down", "up"))`
+```{r}
+fill(table, x2)
+```
+another simple answer, which should also be used with caution.
+
+
+**3. Replace NA's by the column.**
+`replace_na(data, replace = list(), ...)`
+
+```{r}
+replace_na(table, replace = list(x2 = 2))
+```
+the only important thing to note here is the fact that. That the replace argument needs to be within `list()`
+
+
+**Expand Tables**
+
+`expand(data, ...)`
+creates a new tibble with all possible combinations of the vales of variable listed in..
+so what does this really mean?
+
+
+
+
+
+
+```{r}
+# here we are just pulling out the columns of interest; we will go over the select function in the next section.
+cars <- select(mtcars, cyl, gear, carb)
+cars
+expand(cars, cyl, gear, carb)
+```
+use case:
+what if you simply wanted to get a count of the total number of combinations, you could use this and then count the lenght of it. or of you wanted to get the average mpg with each combination you could use this as a reference to make sure you hit every possible combination.
+
+**Split Cells**
+these functions are failry simple, allowing you to split parts of a cell up into multiple cells or vice-versa.
+
+
+
+For these examples were going to use table3 a built in table. Lets first take a look at the table.
+```{r}
+table3
+```
+okay, so lets say we want to split up the rate into the numerator and the denominator.
+
+`separate(data, col, into, sep = "[^[:alnum:]]+", remove = TRUE, convert = FALSE, extra = "warn", fill = "warn", ...)`
+
+the one thing to note here is the `sep = ` argument which has a default that will automatically try to split it up in the following way:   
+*If character, is interpreted as a regular expression. The default value is a regular expression that matches any sequence of non-alphanumeric values. If numeric, interpreted as positions to split at. Positive values start at 1 at the far-left of the string; negative value start at -1 at the far-right of the string. The length of sep should be one less than into.*
+
+otherwise you can use the `sep = ` argument as what is the delimeter? So lets try both ways:
+```{r}
+separate(table3, rate, into = c("numerator", "denominator"), sep = "[^[:alnum:]]+")
+```
+okay perfect, so in this case scenario the default was able to seperate the columns correctly. Now lets just do the same thing specifying the delim.
+
+```{r}
+table3 <- separate(table3, rate, into = c("numerator", "denominator"), sep = "/")
+table3
+```
+cool same thing.
+
+Now lets try to put it back but instead of making the rate a fraction lets make it a ratio with ":"
+
+`unite(data, col, ..., sep = "_", remove = TRUE)`
+
+```{r}
+unite(table3, numerator, denominator, col = rate, sep = ":")
+```
+these tools can be very very useful.
+
+### 2: Data Transformation with dplyr.
+
+###Page 1:
+* Summarise Cases
+    + summarise()
+    + count() --> actually in the Group Cases section.
+* Group Cases
+    + group_by()
+* Manipulate Cases
+    +
+* Manipulate Variables
+
+**Pipes**
+Pipes are a very imortant part of dplyr and something that you will probably see very often. They have a simple function and are just easy to use. a pipe '%>%' basically just pushes the data from whatever is before it to the function that is after it.
+
+for example lets just say that we wanted to get the number of rows of mtcars:
+
+```{r}
+mtcars %>% nrow()
+```
+Thats it, its really simply but its a great way to stay organized when you want to do a series of filters, groups, etc, without nesting or making new variables. You will see more examples of this pretty much throughout the rest of this doc.
+**Summarise Cases**
+The summarise functions are exactly what they sound like, the cool thing is that you can specify what you want to call each time you summarise. and it returns it in a table.
+
+ex:
+lets look the mpg column and the 'hp' column and look at the averages, the median value, and the number of distint cases:
+
+```{r}
+mtcars %>% summarise(mpg_avg = mean(mpg), mpg_median = median(mpg), mpg_ndistint = n_distinct(mpg),
+                     hp_avg = mean(hp), hp_median = median(hp), hp_ndistint = n_distinct(hp))
+
+```
+obviously you dont need to look at these side-by-side but the summarize function lets you explore a lot about a data-set with this simple syntax.
+
+
+**some other useful functions to use in summarise:**
+Center: mean(), median()
+Spread: sd(), IQR(), mad()
+Range: min(), max(), quantile()
+Position: first(), last(), nth(),
+Count: n(), n_distinct()
+Logical: any(), all()
+
+**Group Cases**
+This is one of my favorite dplyr functions. You can use this function in combination with the summarise function to look at groups of your data. For example lets first group all the cars by the number of cylinders that they have. We can then find the average horse power for each group.
+```{r}
+mtcars %>% group_by(cyl) %>%
+  summarise(mean(hp))
+```
+Great, so the output is a simple table that gives us exactly what we asked for.  
+What if we wanted to simply see how many cars of each group there are...
+```{r}
+mtcars %>% group_by(cyl) %>%
+  count()
+```
+Awesome, This is a super easy and necessary tool for exploring data in R.
+
+**Manipulate Cases**
+
+`filter()`
+`distinct()`
+`top_n()`
+`arrange()`
+`desc()`
+`add_row()`
+
+`filter()`
+filter allows you to extract rows from your data that meet certain boolean criteria. For example lets say that we want to look at only the cars that are 6 cylinder and above but have less than 150 horse power.
+```{r}
+mtcars %>% filter(cyl >= 6 & hp < 150)
+```
+Using the logical and boolean operators you can really subset anything you want here which is really easy to use and gives you a nice clean table as a result. Make sure you are firmiliar with all of the logical and boolean operators shown in the middle of this page.
+
+`distinct()`
+This will simply give you the distinct or unique values for the variable you select. For example lets simply check to see the distinct values for 'gear'. and lets count it as well.
+
+```{R}
+mtcars%>% distinct(gear)
+```
+Another great way to use this tool is to select multiple columns to get the distinct combinations for different variables. For example ask for the distinct ccombinations of 'gear' and 'hp'.
+```{R}
+mtcars%>% distinct(gear, hp)
+
+# Lets say we just want to know how many combinations there are:
+mtcars%>% distinct(gear, hp) %>%
+  count()
+
+```
+I use the distinct() and count() combination all the time as I feel it is extremely helpful in understanding a variable that you dont know anything about.
+
+
+`top_n()`  `arrange()` `desc()`
+
+Lets say we want to look at the top 10 cars based on their horsepower. Then we want to order them by their displacement (note: displacement in an engine is ~ the volume of the cylinders).
+
+```{r}
+mtcars %>% top_n(10, hp) %>%
+  arrange(desc(disp))
+```
+The `arrange()` should be self explanitory, the one thing to note is that it will automatically arrange the table in ascending order unless you use the `desc()` as we did, i.e --> desc = "descending order"
+
+`add_row()`
+pretty self explanitory. For this example lets take the table we just made in the example previous and add a new row with some made up information.
+```{r}
+mtcars %>% top_n(10, hp) %>%
+  arrange(desc(disp)) %>%
+  add_row(mpg = 56, cyl = 4, disp = 260, hp= 900)
+```
+The important thing to note here is that if you miss a column it will still go through and will just fill it in as NA.
+
+**Manipulate Variables**
+
+`select()`
+This is probably one of the dplyr functions I use most often. It is simply used to create new dataframes from only the columns you want. For example lets say that we want to look at mtcars, but are specifically interested in the 'qsec' and the 'hp', to remove the noise of the other columns we can make a new dataframe with just those varaibles.
+
+```{r}
+mtcars %>%
+  select(qsec, hp)
+```
+So much cleaner and easier to look at.
+You can also use this finction to deselect a column. For example lets say now we want to look at mtcars; and look at every column exccept 'qsec' and 'hp'. all we have to do is throw the negative sign in front.
+
+
+```{r}
+mtcars %>%
+  select(-qsec, -hp)
+```
+Boom, they're gone.
+
+`mutate()`
+Computing new columns, another must-know function. If you want to make a new column based off other columns, this is the function that you use. Lets go ahead and use the example from the cheatsheet by adding a gallon per mile column.
+```{r}
+mtcars %>% mutate(gpm = 1/mpg)
+```
+you should see that we added a column at the end of the table.
+
+`add_column()`
+
+Okay now lets go ahead and add our own column, lets say we want to add a column with labeling each car into three categorical sizes based off the displacement.
+1. small = disp <= 120.8  
+2. medium = disp > 120.8 & disp <= 326  
+3. large = disp > 326  
+note: these numbers are based off the quartiles.   
+
+First we will use the `add_column()` function to add the empty column:
+```{r}
+# to de-clutter a bit im going to just select a couple columns.
+mtcars2 <-     mtcars %>% select(disp, hp, qsec) %>%
+                add_column(engine_size = NA)
+
+```
+Now that we have the empty column 'engine_size', all we have to do is subset out the once that fit in each category and asign the right category. note: this indexing is done using baseR. I am not sure if there is an easier way to do it with dplyr.
+
+```{r}
+# t
+mtcars2$engine_size[mtcars2$disp <= 120.8] <- "small"
+mtcars2$engine_size[mtcars2$disp > 120.8 & mtcars2$disp <= 326] <- "medium"
+mtcars2$engine_size[mtcars2$disp > 326] <- "large"
+mtcars2
+```
+**Vector Functions**
+This section shows you a handful of other functions to use with the `mutate()` to create new columns based on other columns in your table. note: remember that the column of a table is functionally the same thing as a vector. Lets pick out a few of these functions to practice with.
+
+**Cumulative Aggregates**
+Lets say for example that we are competing in a tag team race across United states. Each team gets 5 cars and one of the race rules is that the total engine displacement for your 5 cars cannot exceed 1000. we can use the  `cumsum()` function to add up the cummulative sum from the 'disp' column.
+
+```{r}
+mtcars2 %>% mutate(cum_displacement = cumsum(disp))
+
+
+```
+We could then play around with the list, trying to find the most horsepower, or best 'qsec' time while keeping the 'cum_displacement' under 1000. note: the one thing to keep in mind here is that the `cum()` function wont reset if you re order the table, so if you want to play around with the order you have to do it before you mutate the new column. One of the great things about the dplyr package (specifically the '%>%' function) is that it allows you to stack all of these functions on top of one another with out having to constantly be saving new dataframes.  
+<br>
+For example lets say that we wanted to first arrange the cars with the highest hp first and then calculate the cumulative displacement:
+
+```{r}
+mtcars2 %>% arrange(desc(hp)) %>%
+        mutate(cum_displacement = cumsum(disp))
+
+
+```
+Now we have the cars with the most horse power 'hp' but if we just selected these cars we would be in trouble because even after the third car we already have a cummulative displacement over 1000.
+
+**Rankings**
+Okay, lets say that one of the other rules is that we only get a certain amount of gas to spread across all of the cars --> 'mpg' is now very important. Lets rank each car against each other by their 'mpg', 'hp', 'disp' and their 'qsec' (note: 'qsec' is their quarter mile time in seconds --> so lower the better). We can rank them against each other giving a score of 1 as the best. We could then add these scores up where having the lowest overall score as the best car based on these four variables.  
+
+
+```{r}
+# lets first just select our variables of interest.
+ mtcars3 <- mtcars %>% select(mpg, hp, qsec, disp) %>%
+            mutate(mpg_rank = min_rank(desc(mpg)), hp_rank = min_rank(desc(hp)), qsec_rank =    min_rank(qsec), disp_rank = min_rank(disp)) %>%
+            mutate(total_rank = (mpg_rank + hp_rank + qsec_rank + disp_rank )) %>%
+            arrange(total_rank) %>%
+            # now just for fun lets go ahead and put the cummulative displacement back in there
+            mutate(cum_displacement = cumsum(disp))
+  mtcars3
+```
+Wow, now look at that the top 5 cars, only add up to 871.4 cummulative displacement so, you could even swap out for a car with a little bit of a larger engine if you wanted to.
+**Misc**
+`if_else()`
+Lets say that we want to label the cars good or bad based on their total rank. The mean total_rank is 65.125, so lets jsut say above that is bad and below that is good.
+```{r}
+mtcars4 <- mtcars3 %>% mutate(good_bad = if_else(total_rank < 65.125, "good", "bad" ))
+mtcars4
+```
+So, we made a new column labeling cars good or bad for the race. I know these examples arent perfect, But i hope you are understanding how to use the functions.
+
+**Summary Functions**
+The summarise() function is really cool as you can specify exactly what you want to look at and you will get a nice table of the results returned. I am just going to show one example to show you how you use the other functions inside fo the summarise() function to get the results you want.
+
+
+Lets say that we want to compare the good/bad cars by three different things:   
+1. average qaurter-mile aka 'qsec'  
+2. max miles per gallon   
+3. the variance of the displacement   
+
+```{r}
+# first we use the group_by() function:
+mtcars4 %>% group_by(good_bad) %>%
+  summarise(mean_qsec = mean(qsec), max_mpg = max(mpg), disp_variance = var(disp))
+```
+Cool, This is a super handy function that basically makes it easy to pull out any sort of descriptive information in a nice organized table.
+
+**Row Names**
+This is a simple but important function to know. Sometimes  you might import data which has the index in the first column, or actual data in the row_names instead of in the first column. The mtcars dataset is actually a perfect example of this. Lets take a look at the dataset as is.
+```{r}
+mtcars
+```
+You can see that the names of the cars are actually the row names rather than the first column in the table. Lets go ahead and change this. This is something your going to want to do when trying to maintain the tidy data formatting rules.
+```{r}
+rownames_to_column(mtcars, var = "car_model")
+```
+one thing to note here is that you want to set the column name using the 'var =' argument.
+
+**Combine Tables**
+This is another extremely important part of tidyr. Merging or combining tables is often a pain point and an easy step to make mistakes. You should make sure you know the difference between a left_join, right_join, inner_join and full_join. I am going to skip over it but if you dont know just google it, as the destintions are very important.
+
+`bind_cols()`
+This function is used to simply bind two df's side-by-side. I would say that the use case for this might be pretty rare, but none-the-less an important one to know. To practice this I am going to split up mtcars into two dataframes and then join them back together.
+
+
+```{r}
+mtcars1 <- rownames_to_column(mtcars, var = "car_model") %>%
+            select(car_model, mpg, cyl, disp)
+mtcars2 <-  rownames_to_column(mtcars, var = "car_model") %>%
+            select(car_model, hp, drat, wt, qsec)
+mtcars1
+mtcars2
+```
+You can see that we have two different dataframes here, each with the same number of rows. We know that these rows are going to match up because we just split them up, but in most cases this is where a mistake would be made. SO it is really important to know for sure that the two dataframes matchup row-wise.   
+<br>
+Now lets go ahead and bind them back together to get our orignal dataset.
+```{r}
+bind_cols(mtcars1, mtcars2)
+```
+Notice how we now have two columns that state the car_model, It automatically added a 1 after the second instance of the 'car_model' variable. In this case, this is a good way to check that they matched up correctly and then we could just deselect that column in the next step.  
+
+
+
+`left_join()`
+Were going to practice merging with the left_join function giving us a resulting dataframe where every row of the left (first listed) dataframe will be accounted for no matter what. For this example lets take the two dataframes from the previous example. Lets first take `mtcars1` which has the car_model, mpg, cyl, disp variables. Lets now say that we want to select the top 10 best cars based off of mpg.
+
+```{r}
+mtcars1 <- mtcars1 %>% top_n(10, mpg)
+mtcars1
+```
+okay cool so these are the 10 cars with the best mpg. Now lets say that we want to get the rest of the information held in mtcars2 like  hp, drat, wt, and the qsec. To do this we are going to join the tables together using a common variable that is unique to every row. In this case that unique identifier is the car_model.
+
+
+```{r}
+left_join(mtcars1, mtcars2, by = "car_model")
+```
+It's that simple, you just need to make sure that you are using a truly unique identifier, usually an id number or some other form of a primary key.
+
+**Wrap-up of dplyr**
+I am not going to do anymore examples of combining Tables, however I reccomend you farmiliarize yourself with some of these other more unique functions that might come in hand down the line.
+
+
+**Title**
+*Italic*
+
+
+```{r}
+
+
+```
+
+
+Links:
+[1]: https://github.com/rstudio/cheatsheets/raw/master/data-import.pdf "Data Import Cheat Sheet"
+[2]: https://github.com/rstudio/cheatsheets/raw/master/data-transformation.pdf "Data Transfromation Cheat Sheet"
+[3]: https://github.com/rstudio/cheatsheets/raw/master/strings.pdf "Work with Strings Cheat Sheet"
+[4]: https://www.kaggle.com/zynicide/wine-reviews/downloads/winemag-data-130k-v2.csv/4 "Wine Reviews Data-set"
+[5]: https://towardsdatascience.com/how-to-handle-missing-data-8646b18db0d4 "How to Handle Missing Data"

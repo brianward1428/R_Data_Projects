@@ -1,0 +1,583 @@
+---
+title: "Baseball Xcase"
+author: "Brian Ward"
+date: "11/12/2018"
+output: rmarkdown::github_document
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(comment = "")
+knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(results = 'hold')
+```
+
+
+```{r include=FALSE}
+# setwd("~/desktop/CS/Level/baseball_Xcase")
+options(stringsAsFactors = F, scipen = 999)
+set.seed(1428)
+library(BSDA)
+library(rmarkdown)
+library(knitr)
+library(tidyverse)
+```
+### Introduction  
+In this project I aimed to practice different hypothesis tests, while exploring data from the 2017 MLB season. I will breifly walk through data exploration and cleaning, but will focus on the statistical tests. I chose the following questions in order to use different statistical tests.
+
+**1] Salary x Total Wins**     
+
+Do the high-paid players on average win more games then the population?  
+
+  * Ho : average wins of playerspaid <= average wins of players   
+  * H1 : average wins of playerspaid > average wins of players  
+    +Test: One-sample Z-Test with 95% confidence level.
+
+**2] Hometown Advantage**   
+
+Is the fact that a game is home or away independent from that team winning or losing the game?  
+
+  * Ho: whether or not any particular game is a home game for a team is independent to a team winning a game  
+  * H1: they are not independend  
+    + Test: Chi-squared test for independence with 95% confidence level.  
+
+**3] Home Runs x Strike outs**  
+
+Do the players who strike out the most, hit more homeruns on average then the population?  
+
+  * Ho : average Home Runs of Players_strikers is equal to or less than the average home runs of  all players   
+  * H1 : average Home Runs of Players_strikers is greater than the average home runs of  all players   
+    + Test: One-sample T-Test with 95% confidence level.  
+
+**4] Years of Experience x Runs Batted In**  
+
+Do players with different levels of experience have different RBI's?  
+
+  * Ho: Average RBI is the same across the three experience levels  
+  * H1: Average RBI is not the same across the three experience levels  
+    + test: One-Way ANOVA with 95% confidence level. plus a tukey post-hoc.  
+
+**5] Night Attendance vs. Day Attendance**   
+
+Do more people attend more Night Games?  
+
+  * Ho : average attendance of  night games is equal to the average attendance of all games   
+  * H1 : average attendance of  night games is NOT equal to the average attendance of all games   
+    + Test: One-sample Z-Test with  95% confidence level.     
+
+### Organizing and Exploring
+Lets first load all of the data into the enviornment. Here we will be working with two different Rdata files. One with data about the players (pls2017), and one about the games (gls2017).
+```{r}
+load("~/desktop/CS/Level/baseball_Xcase/pls2017.RData")
+load("~/desktop/CS/Level/baseball_Xcase/gls2017.RData")
+# the following line is jsut renaming the data so the names match.
+pls2017 <- pls
+```
+
+Lets take a look at it; starting with the players data  (pls2017).
+```{r}
+length(pls2017)
+class(pls2017)
+```
+Okay, so we have a list with 168 items in it. What are these lists holding?
+```{r}
+class(pls2017[[1]])
+```
+okay, so its a list of lists... hmm. lets explore it more.
+
+The Image below is a screenshot of how the data is organized. *note: This is what would be displayed if you clicked on pls2017 from the global enviornment, same as `view(pls2017)`*
+
+
+As you can see the data is organized as a list of lists of dataframes. Where each list contains the same 4 dataframes:  
+1. leagues    
+2. playing_positions  
+3. teams  
+4. players  
+
+*note: if you look at the descriptions to the right you can see that each equivalent dataframe have the same number of columns. Although its not neccessary I decided to aggregate all of the like dataframes into one dataframe. This will just make easier for me to explore the data and to perform my tests.*
+
+
+**Starting with the players data**  
+ We will first create the empty data frames, into which we will organize the data.
+```{r}
+pls17.players <-  data.frame()
+pls17.playing_positions <- data.frame()
+pls17.teams <- data.frame()
+pls17.leagues <- data.frame()
+```
+
+Now we will create a for-loop to iterate through each sublist and bind the like dataframes to the dataframes initialized above.
+```{r}
+for( i in 1:length(pls2017)) {
+  pls.17.players <- rbind(pls17.players, pls2017[[i]]$players)
+  pls17.playing_positions <- rbind(pls17.playing_positions, pls2017[[i]]$playing_positions)
+  pls17.teams <- rbind(pls17.teams, pls2017[[i]]$teams)
+  pls17.leagues <- rbind(pls17.leagues, pls2017[[i]]$leagues)
+}
+```
+
+ **Just to be safe, we will remove any duplicate entries.**
+```{r}
+pls.17.players <- unique(pls.17.players)
+pls17.playing_positions <- unique(pls17.playing_positions)
+pls17.teams <- unique(pls17.teams)
+pls17.leagues <- unique(pls17.leagues)
+```
+
+Okay, great now we have all of the players data organized into the 4 data frames:  
+1. pls.17.players
+2. pls17.playing_positions  
+3. pls17.teams  
+4. pls17.leagues  
+
+**now we will repeat the process with the games data**  
+ The games data is organized the exact same way however there are 12 different data frames:  
+    1. gls.17.games          
+    2. gls.17.home_teams    
+    3. gls.17.leagues       
+    4. gls.17.away_teams     
+    5. gls.17.winning_teams  
+    6. gls.17.seasons        
+    7. gls.17.venues        
+    8. gls.17.officials      
+    9. gls.17.players        
+    10. gls.17.teams         
+    11. gls.17.opponents      
+    12. gls.17.game_logs      
+
+Same steps as above:
+```{r}
+gls.17.games          <-  data.frame()
+gls.17.home_teams     <-  data.frame()
+gls.17.leagues        <-  data.frame()
+gls.17.away_teams     <-  data.frame()
+gls.17.winning_teams  <-  data.frame()
+gls.17.seasons        <-  data.frame()
+gls.17.venues         <-  data.frame()
+gls.17.officials      <-  data.frame()
+gls.17.players        <-  data.frame()
+gls.17.teams          <-  data.frame()
+gls.17.opponents      <-  data.frame()
+gls.17.game_logs      <-  data.frame()
+
+# and we again will iterate through the list of lists creating the dataframes
+for( i in 1:length(gls2017)) {
+gls.17.games          <- rbind(gls.17.games, gls2017[[i]]$games)
+gls.17.home_teams     <- rbind(gls.17.home_teams, gls2017[[i]]$home_teams)
+gls.17.leagues        <- rbind(gls.17.leagues, gls2017[[i]]$leagues)
+gls.17.away_teams     <- rbind(gls.17.away_teams, gls2017[[i]]$away_teams)
+gls.17.winning_teams  <- rbind(gls.17.winning_teams, gls2017[[i]]$winning_teams)
+gls.17.seasons        <- rbind(gls.17.seasons, gls2017[[i]]$seasons)
+gls.17.venues         <- rbind(gls.17.venues, gls2017[[i]]$venues)
+gls.17.officials      <- rbind(gls.17.officials, gls2017[[i]]$officials)
+gls.17.players        <- rbind(gls.17.players, gls2017[[i]]$players)
+gls.17.teams          <- rbind(gls.17.teams, gls2017[[i]]$teams)
+gls.17.opponents      <- rbind(gls.17.opponents, gls2017[[i]]$opponents)
+gls.17.game_logs      <- rbind(gls.17.game_logs, gls2017[[i]]$game_logs)
+}
+# and again we will remove any duplicat rows
+gls.17.games          <- unique(gls.17.games)
+gls.17.home_teams     <- unique(gls.17.home_teams)
+gls.17.leagues        <- unique(gls.17.leagues)
+gls.17.away_teams     <- unique(gls.17.away_teams)
+gls.17.winning_teams  <- unique(gls.17.winning_teams)
+gls.17.seasons        <- unique(gls.17.seasons)
+gls.17.venues         <- unique(gls.17.venues)
+gls.17.officials      <- unique(gls.17.officials)
+gls.17.players        <- unique(gls.17.players)
+gls.17.teams          <- unique(gls.17.teams)
+gls.17.opponents      <- unique(gls.17.opponents)
+gls.17.game_logs      <- unique(gls.17.game_logs)
+```
+
+Now we have all of our data loaded into easy-to-read and navigate data frames. We are going to focus on exploring the game log data. To be clear, the majority of this project was spent exploring and cleaning this data in order to figure out how the data is organized and deciding which questions I might be able to explore. I chose to exclude that part of the project, to keep this document shorter.   
+
+I found that the game_log data (gls.17.game_logs) had the most interesting data, as each row depicted a particular game from an individual player's perspective. I chose to merge this dataframe with the players dataframe (pls.17.players) to get a single dataframe with the most interesting information.   
+
+**Merging the player information and the game log information**   
+Merging these two dataframes was easy to do as each player had its own unique player id.
+```{r}
+gls.17.logs <- merge(gls.17.game_logs, gls.17.players, by.x = "player_id", by.y = "id")
+```
+
+Now I will start to explore the questions that I chose to ask:  
+
+### Salary x Total_Wins
+We are going to start out by trying to see if there is a correlation between the salary of a player and the total wins of a player. first we need to make the total wins attribute as it does not already exist.
+
+
+**Adding the total wins column to the players table**  
+For this step, all we need to do is use the which function inside of a for-loop to select each game log for that particular player which was a win. Then add up the number of instances.
+
+```{r}
+     gls.17.players$wins_total <- NA
+  for(i in gls.17.logs$player_id){
+    team_wins   <- which(gls.17.logs$player_id == i & gls.17.logs$game_played == TRUE & gls.17.logs$team_outcome == "win")
+    total_wins  <- length(team_wins)
+    index       <- which(gls.17.players$id == i)
+    gls.17.players$wins_total[index] <- total_wins
+  }
+
+# here I am just saving my progress which I will do throughout the project, this is just incase i accidently mess something up I dont have to run the for-loops again which can take a long time.
+ gls.17.players2 <- gls.17.players
+
+# now lets take a quick look at the summary of the wins_total column:
+ summary(gls.17.players$wins_total)
+```
+Great, so it looks like we have a range from 0 - 99 wins.  
+
+**now lets take a look at the salary data**
+
+```{r}
+# first have to convert the salary into an integer
+gls.17.players2$salary <- as.integer(gls.17.players2$salary)
+# now I am going to remove any players with a salary equal to zero (which must be inaccurate) as well as remove NA's
+    noSal <- which(gls.17.players2$salary == 0)
+    gls.17.players3 <- gls.17.players2[-noSal,]
+    gls.17.players3 <- gls.17.players3[!is.na(gls.17.players3$salary),]
+# lets see how many are left:
+nrow(gls.17.players3)
+#   I should also check to take out anything that is not in US currency:
+which(gls.17.players3$salary_currency != "USD")
+# and lets look at the salaries column now:
+summary(gls.17.players2$salary)
+```
+So there are only 914 players with salaries not equal to zero or NA out of the original 1357, and all of the salaries are in USD. I decided to just remove these players all together as I am simply looking to compare salary and total wins for practice purposes, therefore there is not a big risk of just removing players.
+
+**now lets check if i there are any NA's in the game wins column**
+```{r}
+    gls.17.players3 <- gls.17.players3[!is.na(gls.17.players3$wins_total),]
+    nrow(gls.17.players3)
+
+    #saving progress again:
+    gls.17.players4 <- gls.17.players3
+```
+Cool so there are no players with a missing wins_total.
+
+**Okay now lets take a look and see if there is a correlation with salary and total number of wins**  
+There are a couple ways to do this, lets first just look at the plot and see if we can see any correlation ourselves.
+```{r}
+ggplot(gls.17.players4, aes(x=salary, y=wins_total)) + geom_point() + scale_fill_brewer() + theme_minimal() + theme(legend.position="none", panel.grid.major = element_blank()) + labs( x ="Salary (USD)", y =  "Total # of Wins") + ggtitle(" Total Wins x Salary") + theme(plot.title = element_text(hjust=0.5))
+```
+
+We can see that there does not appear to be any correlation here. now lets try using the `cor()` function which will actually give us the correlation coefficient.
+
+```{r}
+cor(gls.17.players4$salary, gls.17.players4$wins_total)
+```
+Okay, so with 0.17 we can re-enforce the fact that there isnt really a correlation in between salary and the number of wins.     
+**I do want to run a statistical test however, so I am going to split the population up into two groups, lets label players that make more than 5,000,000 usd as high-paid players or players_paid**  
+
+We can compare these high-paid players to the general population and see if their total wins is statistically greater then the population. *note: I chose the number $5,000,000 as it represents the majority of the the upper quartile and it a nice round number to discuss.*
+```{r}
+paid <- subset(gls.17.players4, gls.17.players4$salary > 5000000)
+# okay so how many players fall into this category?
+nrow(paid)
+# what percent is that of the population?
+nrow(paid)/nrow(gls.17.players4)
+```
+Okay so it looks like we have roughly the top quarter of highest paid players.  
+
+
+**now lets perform a Z-test (95% significance) to see if the high paid players win more games on average then the population**  
+      *Ho : average wins of playerspaid <= average wins of all players   
+      *H1 : average wins of playerspaid > average wins of all players  
+
+
+Lets first pull out the numbers we will need for the test; the population average and standard deviation.
+```{r}
+popmu <- mean(gls.17.players4$wins_total)
+popsd <- sd(gls.17.players4$wins_total)
+paidmu <- mean(paid$wins_total)
+# average population game wins
+popmu
+popsd
+# average high-paid players game wins
+paidmu
+```
+We can see that the average number of game wins is higher for the high paid players, Lets go ahead and perform the Z-test to see if the means are statistically different.
+*note: I chose to conduct a one-sample Z-test here because with a sample size of n = 215, is large enough to represent the population over the Students T Distribution would.*
+```{r}
+z.test(paid$wins_total, mu = popmu, sigma.x = popsd, alternative = "greater")
+```
+**Conclusion**  
+The p-value is clearly less than 0.05 and we can reject the Null hypothesis that the mean of wins for players paid
+is not significantly different than the average of wins for all players. Therefore, we can confidently state that the high-paid players do on average win more games than the general population. I would hope this is the case otherwsie the baseball teams would be doing a bad job allocating their funds.    
+
+### Test for Hometown advantage with Chi-squared Test for Independence
+Here we are simply going to look at whether or not the hometown advantage really helps a team win.
+
+I am going to start by removing any games at a neutral site:
+```{r}
+gls.17.games2 <- gls.17.games[is.na(gls.17.games$at_neutral_site),]
+   nrow(gls.17.games)
+   nrow(gls.17.games2)
+```
+So it actually looks like there were no games at neutral sites, great.
+
+**Making the Contingency Table**
+In order to run the chi-squared test for independence, all I need to do is to create a contingency table with home/away x win/lose. To do this I am first going to make an empty matrix, and then populate it by counting the length of the selected wins/losses.
+
+```{r}
+   matrix1 <- matrix(c(NA, NA, NA, NA), nrow = 2)
+   colnames(matrix1) <- c("Win", "loss")
+   rownames(matrix1) <- c("Home_Game", "Away_Game")
+    nhome_win   <- length(which(gls.17.games2$home_team_outcome == "win"))
+    nhome_loss  <- length(which(gls.17.games2$home_team_outcome == "loss"))
+
+    naway_win   <- length(which(gls.17.games2$away_team_outcome == "win"))
+    naway_loss  <- length(which(gls.17.games2$away_team_outcome == "loss"))  
+matrix1[,1] <- c(nhome_win, naway_win)
+matrix1[,2] <- c(nhome_loss, naway_loss)
+matrix1
+```
+As you can see, I used each game in the game logs as two data points, one for the home team and one for the away team.
+
+
+**now I perform the Chi-squared Test for Independence with 95% Confidence**  
+      *Ho: Whether or not any particular game is a home game for a team is independent to a team winning a game  
+      *H1: They are not independend   
+```{r}
+chisq.test(matrix1)
+```
+**Conclusion**
+We can clearly reject the null hypothesis and conclude that the Hometown advantage is real!
+
+### Home Runs x Strike outs
+Lets see if people who strike out more also hit more home runs. First I am going to add columns to the players table and get a all the correct attributes. *note: you can see that I am also adding slugging average and rbi total, as I am going to use them later on.*
+
+```{r}
+# again this is just for organizational purposes:
+players.lm <- gls.17.players
+
+        players.lm$slg_avg  <- NA
+        players.lm$hr_tot   <- NA
+        players.lm$strk_tot    <- NA
+        players.lm$rbi_tot <- NA
+
+        for(i in players.lm$id){
+            subset    <- subset(gls.17.game_logs,  gls.17.game_logs$player_id == i)
+            avg       <- mean(subset$slugging_percentage)
+            hr_tot  <- sum(subset$home_runs)
+            strk_tot  <- sum(subset$strikeouts)
+            rbi_tot   <- sum(subset$runs_batted_in)
+
+            players.lm[which(players.lm$id == i),"slg_avg" ] <- avg
+            players.lm[which(players.lm$id == i),"hr_tot" ] <- hr_tot
+            players.lm[which(players.lm$id == i),"strk_tot" ] <- strk_tot
+            players.lm[which(players.lm$id == i),"rbi_tot" ] <- rbi_tot
+        }
+```
+
+
+Now lets remove any NA's'and look at the summary of the two variables.
+```{r}
+  players.lm <- subset(players.lm, !is.na(players.lm$strk_tot))
+  players.lm <- subset(players.lm, !is.na(players.lm$hr_tot))
+  # lets see how many are left after removing NA's:
+  nrow(players.lm)/nrow(gls.17.players)
+  # lets take a look at the strikeout distribution
+  summary(players.lm$strk_tot)
+  # and lets take a look at the home run distribution
+  summary(players.lm$hr_tot)
+```
+Wow so there are only 710 left after removing NA's, which is a little over 50% of the total players. Thats a bummer but were just gunna go with it.   
+
+Lets make a quick plot to see if we can see any correlation visually.
+```{r, fig.align= 'center'}
+ggplot(players.lm, aes(x=strk_tot, y=hr_tot)) + geom_point() + scale_fill_brewer() + theme_minimal() + theme(legend.position="none", panel.grid.major = element_blank()) + labs( x = "Total # of Strikeouts", y = "Total # of Home Runs") + ggtitle(" Home Runs x Strikeouts") + theme(plot.title = element_text(hjust=0.5))
+```
+
+Cool, So you can clearly see that players who strikeout more also hit more homeruns, again no surprises here. now lets take a look at the correlation coefficient. *note: In-case you were wondering, Aaron Judge came in at the most strikeouts with a whopping 209 strikeouts for the 2017 season (according to this data-set).*  
+
+```{r}
+ cor(players.lm$hr_tot, players.lm$strk_tot)
+```
+Wow, .87 thats a pretty high correlation coefficient, thats pretty cool. now even though we can cleary see that there is a correlation between the two attributes, I still want to run a statistical test...    
+
+For this projects purposes; I am going to again subset the players based on how many strike outs they hit. I will simply look to see if players who struck out more than 150 times in the 2017 season also hit more home runs than the population.
+```{r}
+most_strk <- subset(players.lm, players.lm$strk_tot >= 150)
+nrow(most_strk)
+nrow(players.lm)
+nrow(most_strk)/nrow(players.lm)
+```
+Okay so there are 24 players who struck out more than 150 times. perfect for a T-test.
+
+lets just get the numbers we need to run the test:
+```{r}
+mu.pop.hr <- mean(players.lm$hr_tot)
+mu.most.strk <- mean(most_strk$hr_tot)
+
+# now lets look at the average homeruns hit by the population?
+mu.pop.hr
+# and the averege for the high-strikeout players?
+mu.most.strk
+```
+Well the means are extremely different, lets go ahead and perform the T-test     
+**Hypothesis:**    
+    Ho : average Home Runs of Players_strikers is equal to or less than the average home runs of  all players   
+    H1 : average Home Runs of Players_strikers is greater than the average home runs of  all players   
+    Test: One-sample T-Test with  95% confidence level.   
+
+```{r}
+t.test(most_strk$hr_tot, alternative = "greater", mu = mu.pop.hr, var.equal = T)
+```
+**Conclusion**   
+Great so we can again reject the null hypothesis and state that players who strike out more that 150 times on average hit more home runs than the general population.
+
+### Years of Experience x Runs Batted In
+Now lets explore how years of experience might effect the rbi of a player. We will again subset all the players based on their years of experience and compare these groups average RBI's.  I will split the level of experience into three groups explained below.   
+
+ Hypothesis:   
+      Ho: Average RBI is the same across the three experience levels   
+      H1: Average RBI is not the same across the three experience levels   
+      Test: 1-way ANOVA to test the difference of means with  a 95% confidence level.   
+
+**Lets take a look at the experience variable**
+```{r}
+# to keep organized i decided to just pull the necessary variables into a new dataframe
+exp_x_rbi <- data.frame(as.numeric( players.lm$rbi_tot), as.numeric(players.lm$years_of_experience))
+exp_x_rbi <- na.omit(exp_x_rbi)
+colnames(exp_x_rbi) <- c("rbi_total", "years_of_experience")
+nrow(exp_x_rbi)
+
+summary(exp_x_rbi$years_of_experience)
+```
+Okay so i have 557 data points with a range from 0 to 17 years of experience, and a mean of 3.4 years.    
+
+**I will split the data into three groups**   
+    1. Low Experience = less than or equal to 5 years    
+    2. Moderate Experience = greater than 5 years and less than or equal to 10 years   
+    3. High Experience = greater than 10 years of experience   
+
+I will make a simple for-loop to do so:
+```{r}
+exp_x_rbi$exp_scale <- NA
+
+for(i in 1:nrow(exp_x_rbi))
+{
+  if(exp_x_rbi$years_of_experience[i] <= 5)
+  {
+    exp_x_rbi[i, "exp_scale"] <- "Low Experience"
+  }
+  if(exp_x_rbi$years_of_experience[i] > 5 & exp_x_rbi$years_of_experience[i] <= 10)
+  {
+    exp_x_rbi[i, "exp_scale"] <- "Moderate Experience"
+  }
+  if(exp_x_rbi$years_of_experience[i] > 10)
+  {
+    exp_x_rbi[i, "exp_scale"] <- "High Experience"
+  }
+}
+```
+
+Lets go ahead and look at these different groups:
+```{r}
+exp.low   <- subset(exp_x_rbi, exp_x_rbi$exp_scale == "Low Experience")
+exp.mod   <- subset(exp_x_rbi, exp_x_rbi$exp_scale == "Moderate Experience")
+exp.high  <- subset(exp_x_rbi, exp_x_rbi$exp_scale == "High Experience")
+
+mu.rbi.pop <- mean(exp_x_rbi$rbi_total)
+mu.rbi.low <- mean(exp.low$rbi_total)
+mu.rbi.mod <- mean(exp.mod$rbi_total)
+mu.rbi.high <- mean(exp.high$rbi_total)
+# lets look at the average rbi of population:
+mu.rbi.pop
+# average rbi of low experience players:
+mu.rbi.low
+# average rbi of moderate experience players:
+mu.rbi.mod
+# average rbi of high experience players:
+mu.rbi.high
+```
+So there are clearly differences in the means. Lets create a simple bar plot to compare the means visually.
+```{r, fig.align= 'center'}
+class1 <- c("All Players","Low Experience" , "Moderate Experience","High Experience")
+class1 <- ordered(class1, levels = c("All Players","Low Experience" , "Moderate Experience","High Experience") )
+mean_rbi_tot <- c(33.44, 28.96 , 48.48,  46.64)
+df_rbi_tot <- data.frame(class1, mean_rbi_tot)
+
+ggplot(data = df_rbi_tot, aes(x=class1, y = mean_rbi_tot, fill = class1)) + geom_bar(stat = "identity") + scale_fill_brewer() + theme_minimal() + theme(legend.position="none", panel.grid.major = element_blank()) + labs( x = "Experience Level", y = "Average RBI") + ggtitle("Total RBI by Experience Level") + theme(plot.title = element_text(hjust=0.5))
+```
+
+You can see that players within the moderate experience class have the highest average RBI, i think that this makes sense considering their experience and relative age. now lets go ahead and see if these means are statistically different.   
+
+**Performing A One-Way ANOVA**
+
+Hypothesis:
+      Ho: Average RBI is the same across the three experience levels
+      H1: Average RBI is not the same across the three experience levels
+      Test: One-Way ANOVA with 95% confidence level. plus a tukey post-hoc.
+
+```{r}
+# first we have to makes sure that the groups are in-fact factors
+exp_x_rbi$exp_scale <- as.factor(exp_x_rbi$exp_scale)
+
+experience_compare <- aov(exp_x_rbi$rbi_total ~ exp_x_rbi$exp_scale , data = exp_x_rbi)
+# the ANOVA Results
+experience_compare
+# and the Summary
+summary(experience_compare)
+```
+**Conclusion**  
+We reject the Null hpyothesis; and state that the means of rbi total are not the same for the different levels of experience.  
+
+Now lets do a post-hoc to determine which means were statistically different:
+```{r}
+tukeyResults <- TukeyHSD(experience_compare)
+tukeyResults
+```
+**Post-Hoc Conclusion**  
+We can state that the means of total rbi's are different for low Experience - High experience, and Moderate - Low,
+but not Moderate - high experience
+
+### Do more people attend Night Games
+For my last test I am going to explore whether or not people attend more night games than day games. Another simple question to ask, that I can run a statistical test on.
+
+Hypothesis:  
+Ho : average attendance of  night games is equal to the average attendance of all games   
+H1 : average attendance of  night games is NOT equal to the average attendance of all games   
+Test: One-sample Z-Test with  95% confidence level.   
+```{r}
+day.night <- gls.17.games[,c("attendance", "daytime")]
+day.night <- na.omit(day.night)
+nrow(day.night)
+nrow(gls.17.games)
+```
+We have 2421 games out of 2431, so we lost 10 games which must have had NA's.   
+
+Now lets subset the games into night and day games:
+```{r}
+night <- subset(day.night, day.night$daytime == F)
+day <- subset(day.night, day.night$daytime == T)
+DN.pop.mu <- mean(day.night$attendance)
+DN.pop.sd <- sd(day.night$attendance)
+night.mu <- mean(night$attendance)
+day.mu <- mean(day$attendance)
+
+night.mu
+day.mu
+```
+Huh, so the average attendance to day games is actually more than at night. Thats weird, lets make a quick barchart to compare these means visually.
+
+```{r, fig.align= 'center'}
+D.N <- c("All", "Day", "Night")
+atnd <- c(DN.pop.mu, day.mu, night.mu)
+df.DN <- data.frame(D.N, atnd)
+df.DN$D.N <- as.factor(D.N)
+
+DN.plot <- ggplot(data = df.DN, aes(x=D.N, y = atnd, fill = D.N)) + geom_bar(stat = "identity") +
+  scale_fill_brewer() + theme_minimal() + theme(legend.position="none", panel.grid.major = element_blank()) + labs( x = "Game Type", y = "Average Attendance") + ggtitle("Average Attendance of Day/Night Games") + theme(plot.title = element_text(hjust=0.5))
+DN.plot
+```
+
+**Performing a Z-test to compare the means**   
+Hypothesis:   
+        Ho : average attendance of  night games is equal to the average attendance of all games      
+        H1 : average attendance of  night games is NOT equal to the average attendance of all games     
+        Test: One-sample Z-Test with  95% confidence level.   
+```{r}
+z.test(night$attendance, mu = DN.pop.mu, sigma.x = DN.pop.sd, alternative = "two.sided")
+```
+**Conclusion**   
+We can again reject the null hypothesis that the means are the same, although the average attendance of night games is actually less than the average attendance of day games, which surprised me.. I guess most people dont work.  

@@ -1,0 +1,777 @@
+---
+output: rmarkdown::github_document
+---
+
+```{r, echo=FALSE, include=FALSE}
+setwd("~/Desktop/CS/webscraping")
+library(rvest)
+library(xml2)
+library(plotly)
+library(lubridate)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = TRUE, comment = "", cache = FALSE, collapse = FALSE, results = 'hold', error = FALSE, message = FALSE, fig.align = 'center')
+```
+# Exploring The Job Market for Data Scientists and Data Analysts In Boston, New York, and Philadelphia  
+### Scraping Indeed with Rvest | Data Wrangling with Tidyverse | Text Mining with Stringr & Tidyverse | Visualization  with the GGplot2
+*Brian Ward*   
+*3/13/2019*  
+
+
+## Introduction
+In this project, I aimed to explore the job market for data analyst and data scientist roles in Boston. I decided this would be a great opportunity to learn about web scraping and decided to build a scraper to pull this information from Indeed and explore the data.  
+
+
+## Part-1- Scraping the Data from Indeed
+For the scraper I decided to use 2 different job titles in 3 different cities, producing 6 different search terms.  
+
+1. Data Science in New York
+2. Data Analysis in New York
+
+3. Data Science in Philidelphia
+4. Data Analysis in Philidelphia
+
+5. Data Science in Boston
+6. Data Analysis in Boston
+
+I used a lot of great resources that walked me through web-scraping and the rvest package so instead of walking through building my own scraper I will just link the posts that I used as guidance. Once you understand how to use the CSS Selector tool and the basic layout of an HTML document, it's fairly straight forward. ***tip for beginners:** pay attention to what changes in the URL as you navigate the site of interest.*
+
+[Beginner’s Guide on Web Scraping in R](https://www.analyticsvidhya.com/blog/2017/03/beginners-guide-on-web-scraping-in-r-using-rvest-with-hands-on-knowledge/)
+
+Heres my scraper:
+
+```{r,  eval = FALSE}
+library(rvest)
+library(xml2)
+library(tidyverse)
+
+search <- c("q=data+analyst&l=New+York,+NY",
+            "q=data+scientist&l=New+York,+NY",
+            "q=data+analyst&l=Boston,+MA",
+            "q=data+scientist&l=Boston,+MA",
+            "q=data+analyst&l=Philadelphia,+PA" ,
+            "q=data+scientist&l=Philadelphia,+PA")
+
+page_index <- seq(from = 0, to = 990, by = 10)
+full_df1 <- data.frame()
+
+
+for(i in 1:length(search)){
+
+  first_page_url <- paste0("https://www.indeed.com/jobs?", search[i])
+
+      for(i in page_index) {
+
+      url <- paste0(first_page_url, "&start=", page_index[i])
+
+      try(page <- xml2::read_html(url))
+      Sys.sleep(2)
+
+      try(job_title <- page %>%
+      rvest::html_nodes("div") %>%
+      rvest::html_nodes(xpath = '//a[@data-tn-element = "jobTitle"]') %>%
+      rvest::html_attr("title") )
+      try(company_name <- page %>%
+      rvest::html_nodes("span")  %>%
+      rvest::html_nodes(xpath = '//*[@class="company"]')  %>%
+      rvest::html_text() %>%
+      stringi::stri_trim_both() )
+      try(job_location <- page %>%
+      rvest::html_nodes("span") %>%
+      rvest::html_nodes(xpath = '//*[@class="location"]')%>%
+      rvest::html_text() %>%
+      stringi::stri_trim_both() )
+      try(links <- page %>%
+      rvest::html_nodes("div") %>%
+      rvest::html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
+      rvest::html_attr("href") )
+
+      job_description <- c()
+      footer <- c()
+
+      for(i in 1:length(links)) {
+      try(url2 <- paste0("https://indeed.com/", links[i]))
+      page2 <- xml2::read_html(url2)
+
+      try(job_description[i] <- page2 %>%
+      rvest::html_nodes("span")  %>%
+      rvest::html_nodes(xpath = '//*[@class="jobsearch-JobComponent-description icl-u-xs-mt--md"]') %>%
+      rvest::html_text() %>%
+      stringi::stri_trim_both() )
+      try(footer[i] <-  page2 %>%
+      rvest::html_nodes("span")  %>%
+      rvest::html_nodes(xpath = '//*[@class="jobsearch-JobMetadataFooter"]') %>%
+      rvest::html_text() )
+      }
+
+  df <- data.frame(job_title, company_name, job_location, job_description, footer)
+  df$search_terms <- search[i]
+  df$date_scraped <- today()
+  full_df1 <- rbind(full_df1, df)
+  }
+}
+
+write_csv(full_df1, "~/Desktop/CS/webscraping/scrape_2019_03_04.csv")
+```
+Im not going to spend any time talking about the scraper, but once you understand how to use the CSS Selector tool and the basic layout of an HTML document, it's fairly straight forward. *tip for beginners: pay attention to what changes in the URL as you navigate the site.*
+
+
+## Part-2- Cleaning and Organizing the Data
+
+Lets start by taking a look at the output dataframe from the scraper.
+```{r}
+postings1 <- read_csv("~/Desktop/CS/webscraping/full_first_scrape_2019_02_05.csv")
+glimpse(postings1)
+```
+
+As you can see we have 7 different variables. All of which are pretty self-explanatory, except for the footer. I wanted the footer because it contained the "time ago" element, and I wanted to know how long each job posting had been up for. The job_description is by far the most dense element containing all of the text from the job listing. This is the part that I was most interested in because I was able to look through the text to find some interesting information.
+
+In this part, I am going to extract a few more features from the data before I look for trends and compare the analyst and scientist positions visually.
+<br>
+**Here are my 6 tasks for this part:**      
+1. Creating variables `title_search` and `city_search` from the `search_term` variable.  
+2. Creating variable `title_term` from the `job_title` variable.  
+3. Creating variable `days_ago` from the footer.  
+4. Creating variable `min_ed` "minimum level of education" from the job descriptions.  
+5. Creating variable `min_exp` "minimum years of experience" from the job descriptions.  
+6. Adding multiple "technology/tool" variables to test for popularity.    
+<br>
+Let's get started.     
+<br>
+
+
+
+### 1. Creating Variable `title_search` and `city_search` from the `search_term` Variable
+
+Here I simply wanted to pull the search job titles (`title_search`) and location (`city_search`) into their own columns so I can refer to them directly. The `search_term` was a segment of the url from the scraper that told indeed what keywords and locations to use in the searches.  
+
+```{r}
+postings1$title_search <- NA
+postings1$city_search <- NA
+# Boston
+postings1[which(postings1$search_terms == "q=data+analyst&l=Boston,+MA"), "title_search"] <- "data analyst"
+postings1[which(postings1$search_terms == "q=data+analyst&l=Boston,+MA"), "city_search"] <- "Boston"
+postings1[which(postings1$search_terms == "q=data+scientist&l=Boston,+MA"), "title_search"] <- "data scientist"
+postings1[which(postings1$search_terms == "q=data+scientist&l=Boston,+MA"), "city_search"] <- "Boston"
+# New York
+postings1[which(postings1$search_terms == "q=data+analyst&l=New+York,+NY"), "title_search"] <- "data analyst"
+postings1[which(postings1$search_terms == "q=data+analyst&l=New+York,+NY"), "city_search"] <- "New York"
+postings1[which(postings1$search_terms == "q=data+scientist&l=New+York,+NY"),"title_search"] <- "data scientist"
+postings1[which(postings1$search_terms == "q=data+scientist&l=New+York,+NY"), "city_search"] <- "New York"
+# Philly
+postings1[which(postings1$search_terms ==  "q=data+analyst&l=Philadelphia,+PA"), "title_search"] <- "data analyst"
+postings1[which(postings1$search_terms ==  "q=data+analyst&l=Philadelphia,+PA"), "city_search"] <- "Philadelphia"
+postings1[which(postings1$search_terms == "q=data+scientist&l=Philadelphia,+PA"), "title_search"] <- "data scientist"
+postings1[which(postings1$search_terms == "q=data+scientist&l=Philadelphia,+PA"), "city_search"] <- "Philadelphia"
+```
+
+Simple enough, now I can filter through the listings using these variables.  
+
+
+### 2. Creating variable `title_term` from the `job_title`
+
+I expected that the search job titles might overlap a bit, (i.e search_term "Data Analyst" would yield job titles of data scientist and vice-versa). So I decided to create the `title_term` variable to use the actual job title to differentiate between analyst and scientist positions.  ***note:** as you can see I removed the end of the word in the pattern so that It will be able to pick up words like "analyst", "analytics", "analysis"" etc..*
+
+```{r}
+postings1$title_term <- NA
+postings1$job_title <- str_to_lower(postings1$job_title)
+postings1$job_title <- str_trim(postings1$job_title, side = "both")
+
+postings1[str_which(postings1$job_title, "analy"), "title_term"] <- "analyst"
+postings1[str_which(postings1$job_title, "scien"), "title_term"] <- "science"
+
+# Because it could be helpful to show include in our visualizations the NA's here since they still show a lot, lets make all the listings that dont have "analyst", or "scien" in the job titles as just "neither"
+postings1[(which(is.na(postings1$title_term))), "title_term"] <- "neither"
+glimpse(postings1)
+```
+
+I can now use this variable in my visualizations to compare the analyst and scientist roles.  
+
+### 3. Creating variable `days_ago` from the footer.
+
+I wanted to know how long each listing had been up for, and the only place I could find this in the HTML, was in the footer. The footers had a few different things in it along with the 'time ago' value. Let's see what an example footer looks like:  
+
+```{r}
+postings1$footer[1]
+```
+**You can see it looks like there are 3 different items:**   
+1. the "time ago" element (they're not all measured in days)  
+2. a "save job" element  
+3. a "report job" element  
+<br>
+I need to just pull out the first element. Unfortunately, they weren't all formatted like this so I couldn't just split them up using the "-" as the separator. I decided to search for the pattern **"ago"**, and then select it and the 10 previous characters to make sure I got the whole element. I know this is a really confusing for-loop, but the rest of it was just cleaning and trimming the string so that it would start with the first number of the `time_ago` element, which you can see in the output:
+```{r}
+postings1$time_ago <- NA
+for( i in 1:nrow(postings1)){
+  var <- str_sub(postings1[i, "footer"], start = if_else((as.vector(str_locate(postings1[i, "footer"]," ago"))[1] -10) < 0, 0, (as.vector(str_locate(postings1[i, "footer"]," ago"))[1] -10)), end = as.vector(str_locate(postings1[i, "footer"]," ago"))[2])
+  var1 <- unlist(var)
+  var2 <- str_split(var, "-")
+  var3 <- unlist(var2)
+  var4 <- var3[if_else(length(var3) < 2, 1, 2)]
+  var5 <- str_trim(var4, side = "both")
+  postings1[i, "time_ago"] <- var5
+}
+# Lets take a look at all the unique values
+unique(postings1$time_ago)
+```
+As you can see, the `time_ago` variable goes all the way from "1 hour ago" to "4 months ago".   
+
+***note**: I actually had a hard time believing that I got good data from this because of the jump from 30+ days to 4 months. Since this project is more about the process, I chose to use it anyway. I also only ran this scraper twice, but If I were to run this scraper daily and track exactly how long each posting was listed before it was taken down, we might be able to infer supply/demand of different roles with the average number of days those listings were up.*
+
+**Convert time_ago to a days_ago Number**  
+I wanted to represent this data with a `days_ago` numerical value, So I decided to give every one a number from 1–30 days with some rounding. A listing with an "hour ago" value will just be 1 day, and one with a "month ago" value will just be 30.
+
+```{r}
+postings1$days_ago <- NA
+#These ones are straight forward
+postings1[str_which(postings1$time_ago, "month"), "days_ago"] <- 30
+postings1[str_which(postings1$time_ago, "hour"), "days_ago"] <- 1
+# And now for the day values
+which_days <- str_which(postings1$time_ago, "day")
+for(i in which_days){
+  postings1[i, "days_ago"] <- regmatches(postings1[i, "time_ago"], gregexpr("[[:xdigit:]]+", postings1[i, "time_ago"]))[[1]][1]
+}
+```
+
+**Now For the Interesting Part: Pulling data from the job descriptions**
+This is the part I was really interested in looking at. Let's start by taking a look at what one of these job descriptions look like.  
+
+```{r}
+postings1$job_description[[5]]
+```
+So you can see its a big messy string… Im going to want to clean this up a bit. So what should I do? I definitely want to remove any case changes, so i'll just make everything lowercase. I am also going to remove some annoying punctuation as well as "/n" that I don't want to get in the way of my pattern matching.   
+
+```{r}
+# For some reason there were 3 listings that didnt have job postings, so im just going to remove those.
+postings1 <- filter(postings1, !is.na(postings1$job_description))
+postings1$job_description <- str_to_lower(postings1$job_description)
+postings1$job_description <- str_replace_all(postings1$job_description, "\n", " ")
+postings1$job_description <- str_replace_all(postings1$job_description, ",", " ")
+postings1$job_description <- str_replace_all(postings1$job_description, "/", " ")
+```
+Cool, now we're ready to look around a bit.
+
+
+### 4. Creating variable `min_ed` "minimum level of education" from the job descriptions.
+So I am basically just going to pick a few string patterns that I think will represent either a bachelors, masters, or doctorate degree. Then I will detect which job descriptions contain those patterns. I can then create a minimum level of education from those results.       
+<br>
+Here are the words that I chose:
+
+```{r}
+words_bachelors <- c("ba/bs", " bs", "b.s", "bachelors", "bachelor's")
+words_masters <-  c(" mba", "masters", "master's", " msc", " ms", "m.s")
+words_doctorate <-  c("phd", "p.h.d", "doctorate", "doctoral")
+```
+***note:** for the abbreviations like "bs" & "ms" I had to put a space in front of it so that it wouldn't pick up that pattern within other words.*  
+<br>
+Now I just have to search for these terms in all of the job postings.
+```{r}
+postings1$bachelors <- NA
+postings1$masters <- NA
+postings1$doctorate <- NA
+
+for(i in 1:nrow(postings1)){
+
+  bach <- c()
+                for(word in words_bachelors){
+                  # start with bachelors
+                  bach1 <- str_detect(postings1$job_description[[i]], word)
+                  bach <- c(bach, bach1)
+                }
+  mast <- c()
+                for(word in words_masters){
+                  # start with bachelors
+                  mast1 <- str_detect(postings1$job_description[[i]], word)
+                  mast <- c(mast, mast1)
+                }
+  doc <- c()
+                for(word in words_doctorate){
+                  # start with bachelors
+                  doc1 <- str_detect(postings1$job_description[[i]], word)
+                  doc <- c(doc, doc1)
+                }
+  # should i do NA instead of False? probably
+postings1$bachelors[[i]] <- ifelse(sum(bach) > 1, TRUE, FALSE)
+postings1$masters[[i]] <- ifelse(sum(mast) > 1, TRUE, FALSE)
+postings1$doctorate[[i]] <- ifelse(sum(doc) > 1, TRUE, FALSE)
+}
+
+```
+
+To get the minimum level of education all I need to do is create a `min_ed` variable and fill it with the level of education from highest to lowest, that way if both bachelors and masters were mentioned in a post the bachelors would over-write it.
+
+```{r}
+postings1$min_ed <- NA
+postings1[which(postings1$doctorate == TRUE), "min_ed"] <- "doctorate"
+postings1[which(postings1$masters == TRUE), "min_ed"] <- "masters"
+postings1[which(postings1$bachelors == TRUE), "min_ed"] <- "bachelors"
+
+# Now let's see where were at...
+glimpse(postings1)
+```
+
+
+
+
+
+### 5. Creating varaible `min_exp` "minimum years of experience" From the Job Descriptions.
+Now I want to do the same thing for years of experience. Again, I started by thinking of the different ways these may have been written in the job descriptions. Heres what I came up with:
+<br>
+
+```{r}
+words_experience <- c("0-1+ year",
+                      "0-2+ year",
+                      "0-3+ year",
+                      "0-4+ year",
+                      "0-5+ year",
+                      "0-1 year",
+                      "0-2 year",
+                      "0-3 year",
+                      "0-4 year",
+                      "0-5 year",
+                      "0 - 1+ year",
+                      "0 - 2+ year",
+                      "0 - 3+ year",
+                      "0 - 4+ year",
+                      "0 - 5+ year",
+                      "0 - 1 year",
+                      "0- 2 year",
+                      "0- 3 year",
+                      "0- 4 year",
+                      "0- 5 year",
+                      ### 1-
+                      " 1+ year",
+                      "1-2+ year",
+                      "1-3+ year",
+                      "1-4+ year",
+                      "1-5+ year",
+                      " 1 year",
+                      "1-2 year",
+                      "1-3 year",
+                      "1-4 year",
+                      "1-5 year",
+                      "1 - 2+ year",
+                      "1 - 3+ year",
+                      "1 - 4+ year",
+                      "1 - 5+ year",
+                      "1 - 2 year",
+                      "1 - 3 year",
+                      "1 - 4 year",
+                      "1 - 5 year",
+                      ### 2-
+                      " 2+ year",
+                      "2-3+ year",
+                      "2-4+ year",
+                      "2-5+ year",
+                      " 2 year",
+                      "2-3 year",
+                      "2-4 year",
+                      "2-5 year",
+                      "2 - 3+ year",
+                      "2 - 4+ year",
+                      "2 - 5+ year",
+                      "2 - 3 year",
+                      "2 - 4 year",
+                      "2 - 5 year",
+                      #### 3 -
+                      " 3+ year",
+                      "3-4+ year",
+                      "3-5+ year",
+                      " 3 year",
+                      "3-4 year",
+                      "3-5 year",
+                      "3 - 4+ year",
+                      "3 - 5+ year",
+                      "3 - 4 year",
+                      "3 - 5 year",
+                      ### 4 -
+                      " 4+ year",
+                      "4-5+ year",
+                       " 4 year",
+                      "4-5 year",
+                      "4 - 5+ year",
+                      "4 - 5 year",
+                      ### 5-
+                      " 5+ year",
+                      " 6+ year",
+                      " 7+ year",
+                      " 8+ year",
+                      " 9+ year",
+                      " 10+ year")
+```
+
+Now I just have to search for them in each posting and fill in the variable if its a positive match.
+
+```{r}
+postings1$exp <- NA
+
+for(i in 1:nrow(postings1)){
+  for(term in words_experience){
+    if(str_detect(postings1$job_description[[i]], term)){
+      postings1$exp[i] <- term
+    }
+    else{
+      next
+    }
+  }
+}
+```
+
+**Pulling out the Minimum**
+Since I know they all start with the first number I can simply just select the first value in the string after removing the white space.   
+
+```{r}
+postings1$exp <- str_trim(postings1$exp, side = "both")
+postings1$min_exp <- NA
+
+for(i in 1:nrow(postings1)){
+postings1$min_exp[i] <- str_sub(postings1$exp[i], 1, 1)
+}
+
+# now lets take a look
+unique(postings1$min_exp)
+```
+Great, So we have a minimum experience with a range all the way from 1 to 9 years.  
+<br>
+
+```{r, echo= FALSE}
+# just cleaning up.  
+postings1 <-  postings1[ , c("date_scraped", "title_search", "city_search", "job_title", "title_term", "company_name", "job_location", "job_description", "time_ago", "days_ago", "bachelors", "masters", "doctorate", "min_ed", "exp", "min_exp")]
+```
+
+### 6. Adding Multiple "Technology/Tool" Variables to Test for Popularity.   
+I wanted to look at different technogies/tools that appear in the job descriptions to see which are the most popular, like Python vs. R etc. For this part I am going to start by picking the tools/tech I want to look for, then after creating a new column for each one, filling it with a TRUE/FALSE if it shows up in the job description. I made this list after reading through a few job descriptions and using general knowledge. Let me know if I missed anything big.
+
+```{r}
+postings1 <- mutate(postings1,
+                  python = NA,
+                  r = NA,
+                  tableau = NA,
+                  scala = NA,
+                  google_analytics = NA,
+                  java = NA,
+                  sql = NA,
+                  mysql =  NA,
+                  nosql = NA,
+                  mongodb = NA,
+                  excel = NA,
+                  powerpoint = NA,
+                  matlab = NA,
+                  sas = NA,
+                  hadoop = NA,
+                  tensorflow = NA,
+                  postgres = NA,
+                  linux = NA,
+                  aws = NA,
+                  hive = NA,
+                  spark = NA,
+                  power_bi =  NA,
+                  scikit_learn =  NA,
+                  azure = NA,
+                  emr = NA)
+
+# great now lets go ahead and fill them in
+
+for(i in 1:nrow(postings1)){
+  postings1$python[i] <- if_else(str_detect(postings1$job_description[i], "python"), TRUE, FALSE)
+  postings1$r[i] <- if_else(str_detect(postings1$job_description[i],  " r "), TRUE, FALSE)
+  postings1$tableau[i] <- if_else(str_detect(postings1$job_description[i], "tableau"), TRUE, FALSE)
+  postings1$scala[i] <- if_else(str_detect(postings1$job_description[i], "scala"), TRUE, FALSE)
+  postings1$google_analytics[i] <- if_else(str_detect(postings1$job_description[i], "google analytics"), TRUE, FALSE)
+  postings1$java[i] <- if_else(str_detect(postings1$job_description[i],  "java"), TRUE, FALSE)
+  postings1$sql[i] <- if_else(str_detect(postings1$job_description[i], " sql"), TRUE, FALSE)
+  postings1$mysql[i] <- if_else(str_detect(postings1$job_description[i], "mysql"), TRUE, FALSE)
+  postings1$nosql[i] <- if_else(str_detect(postings1$job_description[i], "nosql"), TRUE, FALSE)
+  postings1$mongodb[i] <- if_else(str_detect(postings1$job_description[i], "mongodb"), TRUE, FALSE)
+  postings1$excel[i] <- if_else(str_detect(postings1$job_description[i], "excel"), TRUE, FALSE)
+  postings1$powerpoint[i] <- if_else(str_detect(postings1$job_description[i], "powerpoint"), TRUE, FALSE)
+  postings1$matlab[i] <- if_else(str_detect(postings1$job_description[i], "matlab"), TRUE, FALSE)
+  postings1$sas[i] <- if_else(str_detect(postings1$job_description[i], " sas "), TRUE, FALSE)
+  postings1$hadoop[i] <- if_else(str_detect(postings1$job_description[i], "hadoop"), TRUE, FALSE)
+  postings1$tensorflow[i] <- if_else(str_detect(postings1$job_description[i], "tensorflow"), TRUE, FALSE)
+  postings1$postgres[i] <- if_else(str_detect(postings1$job_description[i], "postgres"), TRUE, FALSE)
+  postings1$linux[i] <- if_else(str_detect(postings1$job_description[i], "linux"), TRUE, FALSE)
+  postings1$aws[i] <- if_else(str_detect(postings1$job_description[i], "aws"), TRUE, FALSE)
+  postings1$hive[i] <- if_else(str_detect(postings1$job_description[i], "hive"), TRUE, FALSE)
+  postings1$spark[i] <- if_else(str_detect(postings1$job_description[i], "spark"), TRUE, FALSE)
+  postings1$power_bi[i] <- if_else(str_detect(postings1$job_description[i], "power-bi")|str_detect(postings1$job_description[i], "power bi"), TRUE, FALSE)
+  postings1$scikit_learn[i] <- if_else(str_detect(postings1$job_description[i], "scikit-learn"), TRUE, FALSE)
+  postings1$azure[i] <- if_else(str_detect(postings1$job_description[i], "azure"), TRUE, FALSE)
+  postings1$emr[i] <- if_else(str_detect(postings1$job_description[i], "emr"), TRUE, FALSE)
+  }
+# Now Lets see how it worked
+postings1[17:41] %>% colSums(na.rm = TRUE)
+```
+Okay great, we have some pretty high numbers there. Now let's take a a look at our final dataframe before we start on the visualization part.
+
+```{r}
+glimpse(postings1)
+```
+
+Awesome, We now have 44 variables from the original seven.
+
+
+```{r, echo=FALSE}
+# final cleanse
+postings1$title_search <- as.factor(postings1$title_search)
+postings1$city_search <- as.factor(postings1$city_search)
+postings1$job_title <- as.factor(postings1$job_title)
+postings1$title_term <- as.factor(postings1$title_term)
+postings1$title_term <- fct_relevel(postings1$title_term, c("analyst", "science", "neither"))
+postings1$company_name <- as.factor(postings1$company_name)
+postings1$job_location <- as.factor(postings1$job_location)
+postings1$time_ago <- as.factor(postings1$time_ago)
+postings1$days_ago <- as.integer(postings1$days_ago)
+postings1$min_ed <- as.factor(postings1$min_ed)
+postings1$min_ed <- fct_relevel(postings1$min_ed, c("bachelors", "masters", "doctorate"))
+postings1$exp <- as.factor(postings1$exp)
+postings1$min_exp <- as.factor(postings1$min_exp)
+```
+
+## Part -II- Visualization
+Now that we have a nice data-frame with some variables that should help us understand what the job market for data analysts / data scientists might look like in the three largest cities of the North East. Let’s make some graphs to help us understand the market.  
+<br>
+***Things to note:***  
+
+*  *`title_term` depicts whether “analys”, “scien”, or neither were found in the job title. I am using this variable to differentiate between data analyst and data scientist roles throughout the project.*          
+
+*  *The graphs will represent all of the data from Boston, NY, and Philadelphia unless otherwise specified.*        
+
+<br>  
+
+Let's start out by simply looking at the distribution of our listings across each of the three cities.
+
+```{r, fig.align =  "center"}
+# okay cool lets go ahead and see if we can just make a simple barchart to show the differences
+ggplot(data = postings1, aes( x = city_search, fill = title_term)) + geom_bar(position = 'stack')+ scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="City", y =  "Number of Listings") + ggtitle(" Number of Listings") + theme(plot.title = element_text(hjust=0.5))
+```
+
+So we have about 5,300 listings total. Half of those are from NY, 30% from Philly, and 20% from Boston. As far as analyst vs scientist roles, there appear to be many more analyst roles overall, only in Boston are the number of scientist roles comparable.  
+
+### Most Popular Job Titles in all Three Cities  
+Now lets take a look at the top 10 most popular job titles in the data-set.  
+
+```{r}
+temp <-   group_by(postings1, job_title) %>%
+              count() %>%
+              arrange(desc(n)) %>%
+              head(n= 10)
+# The plots will follow the order of the levels of the factor, So to get it to display in descending order I have to re-set the levels and then flip it
+temp$job_title <- parse_factor(as.character(temp$job_title), rev(as.character(temp$job_title)))
+
+ggplot(data = temp, aes(x = job_title, y = n, fill = "Blues")) + geom_bar(stat = "identity") + geom_text(aes(label=n), size = 2.75, hjust = -.15) + coord_flip() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(legend.position="none", panel.grid.major = element_blank()) + labs( x ="Job Title", y =  "Number of Listings") + ggtitle("Most Popular Job Titles") + theme(plot.title = element_text(hjust=0.5), axis.text.x=element_blank())
+```
+
+Okay, so these are all the generic titles which makes sense. I am however surprised that there are more data scientist titles than data analyst titles. These are also pretty small numbers with the most popular, “data scientist” representing only 4% of the listings. This means that the job title variables are mostly unique. There are actually almost 3400 unique job titles which is a lot for only 5300 listings.  
+
+```{r echo= FALSE}
+# This is just to make one pf my graphs look better, cause the name is just too long
+postings1$company_name <- str_to_lower(postings1$company_name)
+postings1[which(postings1$company_name == "new york city dept of health/mental hygiene"), "company_name"] <- "NYC dept. of health"
+postings1$company_name <- str_to_title(postings1$company_name)
+```
+
+
+### Top Companies in Each City {.tabset .tabset-fade .tabset-fade}  
+
+Now let's see what the top companies are. I thought it would be better to split this up by each city.  
+<br>  
+*note: I’m just showing the code block for Boston here to save room.*
+
+```{r, fig.align= 'right', eval = FALSE}
+temp <-            postings1 %>% filter(city_search == "Boston") %>%
+                          group_by(company_name) %>%
+                          count() %>%
+                          arrange(desc(n)) %>%
+                          head(n= 10)
+
+temp2 <- subset(postings1, postings1$company_name %in% temp$company_name & city_search == "Boston") %>%
+        select(company_name, title_term)
+# fixing levels
+
+temp2$company_name <- parse_factor(as.character(temp2$company_name), rev(as.character(temp$company_name)))
+
+ggplot(data = temp2, aes(x = company_name, fill = title_term) ) + geom_bar(stat = "count") + coord_flip() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Company Name", y =  "Number of Listings") + ggtitle("Hiring Companies in Boston") + theme(plot.title = element_text(hjust=0.5))
+```
+
+#### Boston
+```{r, fig.align= 'center', echo = FALSE}
+temp <-            postings1 %>% filter(city_search == "Boston") %>%
+                          group_by(company_name) %>%
+                          count() %>%
+                          arrange(desc(n)) %>%
+                          head(n= 10)
+temp2 <- subset(postings1, postings1$company_name %in% temp$company_name & city_search == "Boston") %>%
+        select(company_name, title_term)
+
+# fixing levels
+temp2$company_name <- parse_factor(as.character(temp2$company_name), rev(as.character(temp$company_name)))
+
+ggplot(data = temp2, aes(x = company_name, fill = title_term) ) + geom_bar(stat = "count") + coord_flip() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Company Name", y =  "Number of Listings") + ggtitle("Hiring Companies in Boston") + theme(plot.title = element_text(hjust=0.5))
+```
+Wow, so Wayfair on top in Boston, I guess thats not too surprising with the rate they are growing. The ratios of analyst to scientist are kind of all over the place. Amazon is looking for Data Scientists!     
+***
+
+#### New York
+```{r, fig.align= 'center', echo = FALSE}
+# this name is just too long and makes the graph weird...
+
+temp <-            postings1 %>% filter(city_search == "New York") %>%
+                          group_by(company_name) %>%
+                          count() %>%
+                          arrange(desc(n)) %>%
+                          head(n= 10)
+# I have to do this weird way to only include the top 10
+temp2 <- subset(postings1, postings1$company_name %in% temp$company_name & city_search == "New York") %>%
+        select(company_name, title_term)
+# fixing levels
+
+temp2$company_name <- parse_factor(as.character(temp2$company_name), rev(as.character(temp$company_name)))
+
+ggplot(data = temp2, aes(x = company_name, fill = title_term) ) + geom_bar(stat = "count") + coord_flip() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Company Name", y =  "Number of Listings") + ggtitle("Hiring Companies in New York") + theme(plot.title = element_text(hjust=0.5))
+```
+JP Morgan Chase coming in hot with almost double second place… I guess it makes sense that this large bank is looking for tons of analysts.  
+<br>  
+***
+
+#### Philedelphia
+```{r, fig.align= 'center', echo = FALSE}
+temp <-            postings1 %>% filter(city_search == "Philadelphia") %>%
+                          group_by(company_name) %>%
+                          count() %>%
+                          arrange(desc(n)) %>%
+                           head(n= 10)
+temp2 <- subset(postings1, postings1$company_name %in% temp$company_name & city_search == "Philadelphia") %>%
+        select(company_name, title_term)
+# fixing levels
+temp2$company_name <- parse_factor(as.character(temp2$company_name), rev(as.character(temp$company_name)))
+
+ggplot(data = temp2, aes(x = company_name, fill = title_term) ) + geom_bar(stat = "count") + coord_flip() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Company Name", y =  "Number of Listings") + ggtitle("Hiring Companies in Philadelphia") + theme(plot.title = element_text(hjust=0.5))
+```
+Comcast, J&J, IQVIA, all large companies, nothing too crazy here.  
+<br>
+***
+##
+
+### Distribution of the `Days_ago` Feature
+Now let's take a look at the distribution of the Days_ago variable and see if we can find any patterns in how long these listings were up.
+```{r}
+ggplot(data = subset(postings1, !is.na(title_term)), aes(x =days_ago, fill = title_term)) + geom_histogram(binwidth = 5) + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Days Ago", y =  "Number of Listings") + ggtitle("Days Ago") + theme(plot.title = element_text(hjust=0.5))
+```
+We can see that the majority of the listings were listed 30+ days ago. Either the job filling process usually takes more than 30 days or companies are just leaving their listings up. Id bet it’s a mix of both. There doesn’t appear to be any trends differentiating the analyst and scientists roles.  
+
+### Minumum Years of  Experience  
+Now lets start looking at the information we were able to pull out of the job descriptions. Lets create a stacked bar chart to look at the minimum years of experience for analyst vs scientist positions.  
+```{r}
+ggplot(data = subset(postings1, !is.na(postings1$min_exp)), aes(x = min_exp, fill = title_term)) + geom_bar() + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Years of Experience", y =  "Number of Listings") + ggtitle("Minumum Years of Experience") + theme(plot.title = element_text(hjust=0.5))
+
+```
+
+This is about what I expected with the 1–3 as the most common minimum years of experience. I’m little surprised with dip in 4 years. I guess if your looking for a more experienced candidate 5+ just sounds better than 4+. There doesnt appear to be any clear trends to differentiate the analyst vs. scientist roles. I was expecting to see a trend towards greater years of experience required for data scientist roles.  
+
+### Minimum Level of Education
+Now let’s take a look at how our minimum level of education variable looks. Lets start out by looking to see how many data points we were able to extract from the job description.  
+```{r}
+nrow(postings1[postings1$bachelors == TRUE | postings1$masters == TRUE | postings1$doctorate == TRUE,  ])
+nrow(postings1[postings1$bachelors == TRUE | postings1$masters == TRUE | postings1$doctorate == TRUE,  ])/nrow(postings1)
+sum(!is.na(postings1$min_ed))
+
+length(which(postings1$min_ed == "bachelors"))
+length(which(postings1$min_ed == "masters"))
+length(which(postings1$min_ed == "doctorate"))
+```
+okay cool, so we have just over 2300 data points here, around 44%. Im actually pretty happy with that. I’m sure that i missed a few, but that is definitely good enough to look for some trends! Let's take a look.
+
+```{r}
+ggplot(data = subset(postings1, !is.na(min_ed)), aes(x = min_ed, fill = title_term)) + geom_bar(position = 'dodge') + scale_fill_brewer(palette = 'Blues') + theme_minimal() + theme(panel.grid.major = element_blank()) + labs( x ="Minimum Level of Education", y =  "Number of Listings") + ggtitle("Minimum Level of Education") + theme(plot.title = element_text(hjust=0.5))
+```
+I think that looks about right, the majority of the analyst roles requiring a bachelors degree. Even the data scientist roles are split evenly between bachelors and masters, with a few doctorate requirements.  
+
+
+### Top Tools/Technologies for Analyst and Scientist Positions  {.tabset .tabset-fade .tabset-fade}    
+
+And finally, lets take a look at all of the tools and technology data. Lets just make barchart showing the most popular tools. I thought it would be cool to compare these for the analyst roles and the scientist roles as well. note: I am just showing the code for the analyst graph to save room.   
+
+***Things to note:***  
+
+*  *I am hiding the code for producing the data scientist plot to save room.*          
+
+*  *the percentage is calculated using only the analyst listings (or scientist listings below)*        
+
+<br>   
+
+
+```{r, eval = FALSE}
+temp     <- subset(postings1, postings1$title_term == "analyst")
+tools.df <- colSums(temp[17:41],na.rm = TRUE) %>% as.data.frame()
+tools.df <- rownames_to_column(tools.df)
+colnames(tools.df) <- c("tech", "count")
+tools.df <- as_tibble(tools.df)
+tools.df <- arrange(tools.df, desc(count))
+# ordering levels
+tools.df$tech <- parse_factor(as.character(tools.df$tech), rev(as.character(tools.df$tech)))
+
+# The Plot
+ggplot(data = tools.df, aes(x = tech, y = count, fill = "Blues")) + geom_bar(stat = "identity") +
+  geom_text(aes(label=count), size = 2.75, hjust = -.1) +coord_flip() +
+  scale_fill_brewer(palette = 'Blues') + theme_minimal() +
+  theme(legend.position="none", panel.grid.major = element_blank()) +
+  labs( x ="Tools", y =  "Number of Listings") + ggtitle("Most Popular Tools & Tech") +
+  theme(plot.title = element_text(hjust=0.5), , axis.text.x=element_blank())
+```
+
+
+#### Data Analyst Positions  
+
+```{r, echo = FALSE}
+temp     <- subset(postings1, postings1$title_term == "analyst")
+tools.df <- colSums(temp[17:41],na.rm = TRUE) %>% as.data.frame()
+tools.df <- rownames_to_column(tools.df)
+colnames(tools.df) <- c("tech", "count")
+tools.df <- as_tibble(tools.df)
+tools.df <- mutate(tools.df, percent = paste(ceiling(count/nrow(temp)*100), "%"))
+tools.df <- arrange(tools.df, desc(count))
+# ordering levels
+tools.df$tech <- parse_factor(as.character(tools.df$tech), rev(as.character(tools.df$tech)))
+
+# The Plot
+ggplot(data = tools.df, aes(x = tech, y = count, fill = "Blues")) + geom_bar(stat = "identity") +
+  geom_text(aes(label=percent), size = 2.75, hjust = -.1) +coord_flip() +
+  scale_fill_brewer(palette = 'Blues') + theme_minimal() +
+  theme(legend.position="none", panel.grid.major = element_blank()) +
+  labs( x ="Tools", y =  "Number of Listings") + ggtitle("Most Popular Tools & Tech for Data Analyst Positions") +
+  theme(plot.title = element_text(hjust=0.5))
+```
+  No surprises here, excel came in on top being mentioned in almost 65% of all the listings. Python beat out R. I am actually surprised that SQL is as high as it is above both python and R. Scala and Tableau were also pretty popular.  
+
+***
+
+#### Data Scientist Positions   
+
+```{r, echo = FALSE}
+temp     <- subset(postings1, postings1$title_term == "science")
+tools.df <- colSums(temp[17:41],na.rm = TRUE) %>% as.data.frame()
+tools.df <- rownames_to_column(tools.df)
+colnames(tools.df) <- c("tech", "count")
+tools.df <- as_tibble(tools.df)
+tools.df <- mutate(tools.df, percent = paste(ceiling(count/nrow(temp)*100), "%"))
+tools.df <- arrange(tools.df, desc(count))
+# ordering levels
+tools.df$tech <- parse_factor(as.character(tools.df$tech), rev(as.character(tools.df$tech)))
+
+# The Plot
+ggplot(data = tools.df, aes(x = tech, y = count, fill = "Blues")) + geom_bar(stat = "identity") +
+  geom_text(aes(label=percent), size = 2.75, hjust = -.1) +coord_flip() +
+  scale_fill_brewer(palette = 'Blues') + theme_minimal() +
+  theme(legend.position="none", panel.grid.major = element_blank()) +
+  labs( x ="Tools", y =  "Number of Listings") + ggtitle("Most Popular Tools & Tech for Data Science Positions") +
+  theme(plot.title = element_text(hjust=0.5))
+```
+Similar results here, but python beat out even excel appearing in 63% of the listings. Spark jumps up to appear in nearly a quarter of the listings.   
+
+***   
+
+##
+
+### Thanks for Reading
+Thanks for checking out my project, I am hoping to expand this project to do some more text analysis on the job descriptions to see what else I might be able to pull out of there. I would love to hear any thoughts on my methodology as I am learning myself. Thanks again!  
